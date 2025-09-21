@@ -3,8 +3,8 @@ import tempfile
 from pathlib import Path
 from typing import List
 import logging
-import whisper
-from pytube import YouTube
+from faster_whisper import WhisperModel
+import yt_dlp
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +15,7 @@ class VideoLoader:
         """Initialize with YouTube URL."""
         self.url = url
         self.documents: List[str] = []
-        self.model = whisper.load_model("base")
+        self.model = WhisperModel("base", device="cpu", compute_type="int8")
     
     def download_audio(self) -> str:
         """Download audio from YouTube video."""
@@ -61,19 +61,18 @@ class VideoLoader:
                 logger.info(f"Audio file downloaded: {temp_audio_path} ({os.path.getsize(temp_audio_path)} bytes)")
     
     def transcribe_audio(self, audio_path: str) -> None:
-        """Transcribe audio file using Whisper."""
+        """Transcribe audio file using faster-whisper."""
         try:
-            # Transcribe audio
-            result = self.model.transcribe(audio_path)
+            # Transcribe audio using faster-whisper
+            segments, info = self.model.transcribe(audio_path, beam_size=5)
             
-            # Split transcription into segments
-            segments = result["segments"]
+            logger.info(f"Detected language '{info.language}' with probability {info.language_probability}")
             
             # Format transcription with timestamps
             transcription = []
             for segment in segments:
-                start_time = int(segment["start"])
-                text = segment["text"].strip()
+                start_time = int(segment.start)
+                text = segment.text.strip()
                 if text:
                     timestamp = f"[{start_time//60:02d}:{start_time%60:02d}]"
                     transcription.append(f"{timestamp} {text}")
