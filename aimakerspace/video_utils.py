@@ -1,10 +1,8 @@
 import os
 import tempfile
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 import logging
-from faster_whisper import WhisperModel
-import yt_dlp
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +13,19 @@ class VideoLoader:
         """Initialize with YouTube URL."""
         self.url = url
         self.documents: List[str] = []
-        self.model = WhisperModel("base", device="cpu", compute_type="int8")
+        self.model: Optional[object] = None  # Lazy load the model
+    
+    def _load_model(self):
+        """Lazy load the Whisper model only when needed."""
+        if self.model is None:
+            try:
+                from faster_whisper import WhisperModel
+                logger.info("Loading faster-whisper model...")
+                self.model = WhisperModel("base", device="cpu", compute_type="int8")
+                logger.info("Model loaded successfully")
+            except ImportError as e:
+                logger.error(f"Failed to import faster-whisper: {e}")
+                raise ValueError("faster-whisper not available")
     
     def download_audio(self) -> str:
         """Download audio from YouTube video."""
@@ -63,6 +73,9 @@ class VideoLoader:
     def transcribe_audio(self, audio_path: str) -> None:
         """Transcribe audio file using faster-whisper."""
         try:
+            # Lazy load the model if not already loaded
+            self._load_model()
+            
             # Transcribe audio using faster-whisper
             segments, info = self.model.transcribe(audio_path, beam_size=5)
             

@@ -83,71 +83,9 @@ export default function Chat() {
   };
 
   const handleUploadYoutube = async () => {
-    if (!youtubeUrl || !apiKey.trim()) {
-      setError('Please enter a YouTube URL and your API key.');
-      return;
-    }
-
-    // Validate YouTube URL format
-    try {
-      const url = new URL(youtubeUrl);
-      if (!url.hostname.includes('youtube.com') && !url.hostname.includes('youtu.be')) {
-        setError('Please enter a valid YouTube URL');
-        return;
-      }
-    } catch (e) {
-      setError('Please enter a valid URL');
-      return;
-    }
-
-    setIsUploading(true);
-    setError(null);
-
-    try {
-      console.log('Processing YouTube URL:', `${API_URL}/api/upload-youtube`);
-      const response = await fetch(`${API_URL}/api/upload-youtube`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          url: youtubeUrl,
-          api_key: apiKey,
-          options: {
-            append_context: appendContext
-          },
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('YouTube Upload Error:', response.status, errorText);
-        throw new Error(`Upload Error: ${response.status} ${errorText}`);
-      }
-
-      const result: YouTubeUploadResponse = await response.json();
-      console.log('Upload successful:', result);
-      
-      // Update status
-      setPdfStatus({ pdf_uploaded: true, chunks_count: result.chunks_count });
-      setHasUploadedInSession(true);
-      
-      // Clear the URL input
-      setYoutubeUrl('');
-      
-      // Add success message and summary to chat
-      setMessages(prev => [...prev, { 
-        role: 'system', 
-        content: `Video processed successfully! Created ${result.chunks_count} text chunks.\n\nVideo Summary:\n${result.summary}\n\nYou can now ask questions about the video content.` 
-      }]);
-
-    } catch (error) {
-      console.error('Upload error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to process YouTube video';
-      setError(errorMessage);
-    } finally {
-      setIsUploading(false);
-    }
+    // YouTube functionality temporarily disabled for minimal deployment
+    setError('YouTube video processing is temporarily unavailable in the minimal deployment. Please use PDF uploads for now.');
+    return;
   };
 
   const handleUploadPdf = async () => {
