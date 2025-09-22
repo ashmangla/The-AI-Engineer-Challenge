@@ -1,8 +1,5 @@
 const isDevelopment = process.env.NODE_ENV === 'development';
-const VERCEL_URL = process.env.NEXT_PUBLIC_VERCEL_URL;
 
 export const API_URL = isDevelopment 
   ? 'http://localhost:8000'
-  : VERCEL_URL 
-    ? `https://${VERCEL_URL}/api` 
-    : '/api';
+  : 'https://the-ai-engineer-challenge-c8wy76rn9-ashima-manglas-projects.vercel.app/api';
