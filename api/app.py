@@ -86,7 +86,7 @@ class RAGChatRequest(BaseModel):
     k: Optional[int] = 8   # Number of relevant chunks to retrieve
 
 # YouTube URL upload endpoint
-@app.post("/upload-youtube")
+@app.post("/api/upload-youtube")
 async def upload_youtube(request: YouTubeRequest):
     """Process a YouTube video URL for RAG system."""
     global vector_db, document_chunks, pdf_uploaded
@@ -171,7 +171,7 @@ async def upload_youtube(request: YouTubeRequest):
         raise HTTPException(status_code=500, detail=f"Error processing video: {str(e)}")
 
 # PDF upload endpoint for RAG system
-@app.post("/upload-document")
+@app.post("/api/upload-document")
 async def upload_document(
     file: UploadFile = File(...), 
     api_key: str = Form(...),
@@ -297,7 +297,7 @@ async def upload_document(
         raise HTTPException(status_code=500, detail=f"Error processing document: {str(e)}")
 
 # RAG-enabled chat endpoint
-@app.post("/rag-chat-mixed-media")
+@app.post("/api/rag-chat-mixed-media")
 async def rag_chat(request: RAGChatRequest):
     """Chat endpoint that uses uploaded documents (PDFs, Word documents) as context."""
     global vector_db, document_chunks, pdf_uploaded
@@ -393,7 +393,7 @@ Instructions:
         raise HTTPException(status_code=500, detail=str(e))
 
 # Get PDF status endpoint
-@app.get("/pdf-status")
+@app.get("/api/pdf-status")
 async def pdf_status():
     """Get current PDF upload status."""
     global pdf_uploaded, document_chunks
@@ -404,7 +404,7 @@ async def pdf_status():
     }
 
 # Define the main chat endpoint that handles POST requests
-@app.post("/chat")
+@app.post("/api/chat")
 async def chat(request: ChatRequest):
     try:
         logger.info(f"Received chat request with model: {request.model}")
