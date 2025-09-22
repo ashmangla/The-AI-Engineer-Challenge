@@ -8,6 +8,11 @@ python-multipart==0.0.6
 # Document processing (lightweight)
 PyPDF2==3.0.1
 python-docx==0.8.11
+numpy==1.24.3
+
+# Additional dependencies that might be needed
+httpx==0.25.2
+typing-extensions==4.8.0
 
 # Environment
 python-dotenv==1.0.0
