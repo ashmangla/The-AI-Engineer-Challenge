@@ -8,9 +8,10 @@ python-multipart==0.0.6
 
 # Document processing (lightweight)
 PyPDF2==3.0.1
+python-docx==0.8.11
 
 # Environment
 python-dotenv==1.0.0
 
-# Note: Removed video processing dependencies to reduce memory footprint
-# This minimal version only supports PDF processing
+# Note: Supports PDF and Word document processing
+# Removed video processing dependencies to reduce memory footprint

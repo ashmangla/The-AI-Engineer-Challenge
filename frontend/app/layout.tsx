@@ -2,8 +2,8 @@ import './globals.css';
 import { ReactNode } from 'react';
 
 export const metadata = {
-  title: 'RAG Chat with PDF',
-  description: 'A RAG-enabled chat interface that lets you upload PDFs and ask questions about them',
+  title: 'Paper Summarizer & Analyzer',
+  description: 'A RAG-enabled chat interface that lets you upload PDFs and Word documents and ask questions about them',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

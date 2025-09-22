@@ -16,7 +16,7 @@ import logging
 # Add the parent directory to the path to import aimakerspace
 sys.path.append(str(Path(__file__).parent.parent))
 
-from aimakerspace.text_utils import PDFLoader, CharacterTextSplitter
+from aimakerspace.text_utils import PDFLoader, WordLoader, CharacterTextSplitter
 from aimakerspace.openai_utils.embedding import OpenAIEmbedding
 from aimakerspace.openai_utils.chatmodel import ChatOpenAI
 from aimakerspace.vectordatabase import VectorDatabase
@@ -58,45 +58,52 @@ async def health_check():
     logger.info("Health check endpoint called")
     return {"status": "healthy", "message": "Paper Summarizer & Analyzer API is running"}
 
-@app.post("/api/upload-pdf")
-async def upload_pdf(
+@app.post("/api/upload-document")
+async def upload_document(
     file: UploadFile = File(...),
     api_key: str = Form(...),
     append_context: bool = Form(False)
 ):
-    """Upload and process PDF document."""
+    """Upload and process PDF or Word document."""
     global document_chunks, vector_db, document_sources
     
     try:
         # Validate file type
-        if not file.filename.lower().endswith('.pdf'):
-            raise HTTPException(status_code=400, detail="Only PDF files are supported")
+        filename = file.filename.lower()
+        if not (filename.endswith('.pdf') or filename.endswith('.docx') or filename.endswith('.doc')):
+            raise HTTPException(status_code=400, detail="Only PDF and Word documents (.pdf, .docx, .doc) are supported")
         
         # Read file content
         content = await file.read()
         
-        # Process PDF
-        pdf_loader = PDFLoader()
-        text_content = pdf_loader.load_from_bytes(content)
+        # Process document based on file type
+        if filename.endswith('.pdf'):
+            loader = PDFLoader()
+            text_content = loader.load_from_bytes(content)
+            doc_type = "PDF"
+        else:  # Word document
+            loader = WordLoader()
+            text_content = loader.load_from_bytes(content)
+            doc_type = "Word"
         
         if not text_content:
-            raise HTTPException(status_code=400, detail="Could not extract text from PDF")
+            raise HTTPException(status_code=400, detail=f"Could not extract text from {doc_type} document")
         
         # Split text into chunks
         chunks = text_splitter.split(text_content)
         
         # Add source tracking
-        chunks_with_source = [f"[PDF: {file.filename}] {chunk}" for chunk in chunks]
+        chunks_with_source = [f"[{doc_type}: {file.filename}] {chunk}" for chunk in chunks]
         
         # Handle context management
         if append_context and document_chunks:
             # Append to existing context
             document_chunks.extend(chunks_with_source)
-            document_sources.append(f"PDF: {file.filename}")
+            document_sources.append(f"{doc_type}: {file.filename}")
         else:
             # Replace existing context
             document_chunks = chunks_with_source
-            document_sources = [f"PDF: {file.filename}"]
+            document_sources = [f"{doc_type}: {file.filename}"]
         
         # Create embeddings and vector database
         embedding_model = OpenAIEmbedding(api_key=api_key)
@@ -110,7 +117,7 @@ async def upload_pdf(
         chat_model = ChatOpenAI(api_key=api_key, model_name="gpt-4o-mini")
         summary_messages = [
             {"role": "system", "content": "You are a helpful assistant that creates concise summaries of documents."},
-            {"role": "user", "content": f"Please provide a concise summary (max 100 words) of this document: {chunks[:3]}"}
+            {"role": "user", "content": f"Please provide a concise summary (max 100 words) of this {doc_type} document: {chunks[:3]}"}
         ]
         
         summary_response = chat_model.run(summary_messages)
@@ -120,16 +127,17 @@ async def upload_pdf(
             "message": f"Successfully uploaded {file.filename}",
             "chunks_count": len(chunks),
             "summary": summary,
-            "sources": document_sources
+            "sources": document_sources,
+            "document_type": doc_type
         }
         
     except Exception as e:
-        logger.error(f"Error processing PDF: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(e)}")
+        logger.error(f"Error processing document: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error processing document: {str(e)}")
 
 @app.post("/api/rag-chat-mixed-media")
 async def rag_chat(request: RAGChatRequest):
-    """RAG chat endpoint for mixed media (PDFs only in minimal version)."""
+    """RAG chat endpoint for documents (PDF and Word)."""
     global vector_db
     
     try:
@@ -154,13 +162,14 @@ async def rag_chat(request: RAGChatRequest):
         context = "\n\n".join(relevant_chunks)
         
         # System message
-        system_message = f"""You are a helpful assistant that answers questions based ONLY on the provided context from uploaded content (PDFs).
+        system_message = f"""You are a helpful assistant that answers questions based ONLY on the provided context from uploaded content (PDFs and Word documents).
 
 Context from uploaded content:
 {context}
 
 Instructions:
 - Answer the user's question using ONLY the information provided in the context above
+- The context may include content from multiple sources (documents) - each source is labeled
 - If the answer cannot be found in the context, say "I cannot find information about that in the provided content"
 - Be direct and informative in your responses"""
         

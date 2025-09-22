@@ -17,7 +17,7 @@ import traceback
 
 # Add the parent directory to sys.path to import aimakerspace
 sys.path.append(str(Path(__file__).parent.parent))
-from aimakerspace.text_utils import PDFLoader, CharacterTextSplitter
+from aimakerspace.text_utils import PDFLoader, WordLoader, CharacterTextSplitter
 from aimakerspace.video_utils import VideoLoader
 from aimakerspace.vectordatabase import VectorDatabase
 from aimakerspace.openai_utils.embedding import EmbeddingModel
@@ -167,21 +167,22 @@ async def upload_youtube(request: YouTubeRequest):
         raise HTTPException(status_code=500, detail=f"Error processing video: {str(e)}")
 
 # PDF upload endpoint for RAG system
-@app.post("/api/upload-pdf")
-async def upload_pdf(
+@app.post("/api/upload-document")
+async def upload_document(
     file: UploadFile = File(...), 
     api_key: str = Form(...),
     append_context: bool = Form(False)
 ):
-    """Upload and process a PDF file for RAG system."""
+    """Upload and process a PDF or Word document for RAG system."""
     global vector_db, document_chunks, pdf_uploaded
     
     try:
-        logger.info(f"Received PDF upload: {file.filename}")
+        logger.info(f"Received document upload: {file.filename}")
         
         # Validate file type
-        if not file.filename or not file.filename.lower().endswith('.pdf'):
-            raise HTTPException(status_code=400, detail="Only PDF files are allowed")
+        filename = file.filename.lower()
+        if not file.filename or not (filename.endswith('.pdf') or filename.endswith('.docx') or filename.endswith('.doc')):
+            raise HTTPException(status_code=400, detail="Only PDF and Word documents (.pdf, .docx, .doc) are allowed")
         
         # Validate API key
         if not api_key:
@@ -190,31 +191,48 @@ async def upload_pdf(
         # Set the API key for the aimakerspace library
         os.environ["OPENAI_API_KEY"] = api_key
         
+        # Determine file type and extension
+        if filename.endswith('.pdf'):
+            file_ext = '.pdf'
+            doc_type = "PDF"
+        elif filename.endswith('.docx'):
+            file_ext = '.docx'
+            doc_type = "Word"
+        else:  # .doc
+            file_ext = '.doc'
+            doc_type = "Word"
+        
         # Save uploaded file temporarily
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as temp_file:
             content = await file.read()
             temp_file.write(content)
             temp_file_path = temp_file.name
         
         try:
-            # Process PDF using aimakerspace
-            logger.info("Loading PDF content...")
-            pdf_loader = PDFLoader(temp_file_path)
-            pdf_loader.load_file()
+            # Process document using aimakerspace
+            logger.info(f"Loading {doc_type} content...")
+            if doc_type == "PDF":
+                loader = PDFLoader(temp_file_path)
+            else:  # Word document
+                loader = WordLoader(temp_file_path)
             
-            if not pdf_loader.documents:
-                raise HTTPException(status_code=400, detail="Could not extract text from PDF")
+            loader.load_file()
+            
+            if not loader.documents:
+                raise HTTPException(status_code=400, detail=f"Could not extract text from {doc_type} document")
             
             # Split text into chunks
             logger.info("Splitting text into chunks...")
+            logger.info(f"Original document content preview: {loader.documents[0][:300]}...")
             text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-            new_chunks = text_splitter.split_texts(pdf_loader.documents)
+            new_chunks = text_splitter.split_texts(loader.documents)
+            logger.info(f"Generated {len(new_chunks)} chunks from document")
             
             if not new_chunks:
-                raise HTTPException(status_code=400, detail="No text chunks could be created from PDF")
+                raise HTTPException(status_code=400, detail=f"No text chunks could be created from {doc_type} document")
             
             # Add source information to each chunk
-            source_prefix = f"[Source: PDF - {file.filename}]\n"
+            source_prefix = f"[Source: {doc_type} - {file.filename}]\n"
             new_chunks_with_source = [source_prefix + chunk for chunk in new_chunks]
             
             # Handle append vs replace
@@ -231,28 +249,36 @@ async def upload_pdf(
             vector_db = VectorDatabase(embedding_model)
             vector_db = await vector_db.abuild_from_list(document_chunks)
             
-            # Generate a 4-line summary using the first few chunks
+            # Generate a summary using only the newly uploaded document chunks
             logger.info("Generating document summary...")
             chat_model = ChatOpenAI(model_name="gpt-4o-mini")
-            summary_prompt = f"""Provide a concise summary of this document in no more than 100 words. Focus on the key aspects and main contributions.
+            
+            # Use all the new chunks for summary, not just the first 5
+            summary_content = ' '.join(new_chunks_with_source)
+            logger.info(f"Number of chunks: {len(new_chunks_with_source)}")
+            logger.info(f"Summary content preview (first 500 chars): {summary_content[:500]}...")
+            logger.info(f"Summary content length: {len(summary_content)} characters")
+            summary_prompt = f"""Provide a concise summary of this {doc_type} document in no more than 100 words. Focus on the key aspects and main contributions.
 
             Document content:
-            {' '.join(document_chunks[:5])}
+            {summary_content}
             """
             summary_messages = [
                 {"role": "system", "content": "You are a helpful assistant that provides concise document summaries. Always stay within the specified word limit."},
                 {"role": "user", "content": summary_prompt}
             ]
             summary_response = chat_model.run(summary_messages)
+            logger.info(f"Generated summary: {summary_response}")
             
             pdf_uploaded = True
             
-            logger.info(f"Successfully processed PDF with {len(document_chunks)} chunks")
+            logger.info(f"Successfully processed {doc_type} document with {len(document_chunks)} chunks")
             return {
-                "message": f"PDF processed successfully. Here's a summary:\n{summary_response}",
+                "message": f"{doc_type} document processed successfully. Here's a summary:\n{summary_response}",
                 "chunks_count": len(document_chunks),
                 "filename": file.filename,
-                "summary": summary_response
+                "summary": summary_response,
+                "document_type": doc_type
             }
             
         finally:
@@ -262,14 +288,14 @@ async def upload_pdf(
     except HTTPException:
         raise
     except Exception as e:
-        error_msg = f"Error processing PDF: {str(e)}\n{traceback.format_exc()}"
+        error_msg = f"Error processing document: {str(e)}\n{traceback.format_exc()}"
         logger.error(error_msg)
-        raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error processing document: {str(e)}")
 
 # RAG-enabled chat endpoint
 @app.post("/api/rag-chat-mixed-media")
 async def rag_chat(request: RAGChatRequest):
-    """Chat endpoint that uses uploaded mixed media (PDFs, YouTube videos) as context."""
+    """Chat endpoint that uses uploaded documents (PDFs, Word documents) as context."""
     global vector_db, document_chunks, pdf_uploaded
     
     try:
@@ -279,7 +305,7 @@ async def rag_chat(request: RAGChatRequest):
         if not pdf_uploaded or not vector_db:
             raise HTTPException(
                 status_code=400, 
-                detail="No PDF has been uploaded. Please upload a PDF first."
+                detail="No document has been uploaded. Please upload a document first."
             )
         
         # Set the API key for the aimakerspace library
@@ -291,11 +317,15 @@ async def rag_chat(request: RAGChatRequest):
         
         # Retrieve relevant chunks from vector database
         logger.info(f"Searching for relevant context with k={k}...")
+        logger.info(f"Total document chunks available: {len(document_chunks)}")
+        
         relevant_chunks = vector_db.search_by_text(
             request.user_message, 
             k=k, 
             return_as_text=True
         )
+        
+        logger.info(f"Found {len(relevant_chunks) if relevant_chunks else 0} relevant chunks")
         
         if not relevant_chunks:
             # Fallback: use first few chunks if no relevant chunks found
@@ -314,14 +344,14 @@ async def rag_chat(request: RAGChatRequest):
         context = "\n\n".join(relevant_chunks)
         
         # Create simple system message for all questions
-        system_message = f"""You are a helpful assistant that answers questions based ONLY on the provided context from uploaded content (PDFs and YouTube videos). 
+        system_message = f"""You are a helpful assistant that answers questions based ONLY on the provided context from uploaded content (PDFs and Word documents). 
 
 Context from uploaded content:
 {context}
 
 Instructions:
 - Answer the user's question using ONLY the information provided in the context above
-- The context may include content from multiple sources (documents and videos) - each source is labeled
+- The context may include content from multiple sources (documents) - each source is labeled
 - If the answer cannot be found in the context, say "I cannot find information about that in the provided content"
 - Do not use any external knowledge beyond what's in the context
 - Be direct and informative in your responses"""

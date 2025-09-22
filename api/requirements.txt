@@ -7,16 +7,10 @@ python-multipart==0.0.6
 
 # Document processing (lightweight)
 PyPDF2==3.0.1
+python-docx==0.8.11
 
 # Environment
 python-dotenv==1.0.0
 
-# Video processing (optimized)
-yt-dlp==2023.12.30
-faster-whisper==0.10.0
-
-# Remove pytube (redundant with yt-dlp)
-# pytube>=15.0.0
-
-# Remove numpy (not directly needed, faster-whisper handles it)
-# numpy>=1.24.3
+# Note: Removed video processing dependencies to reduce memory footprint
+# This version supports PDF and Word document processing

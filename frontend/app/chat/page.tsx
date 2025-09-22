@@ -9,12 +9,6 @@ interface DocumentStatus {
   chunks_count: number;
 }
 
-interface YouTubeUploadResponse {
-  message: string;
-  chunks_count: number;
-  url: string;
-  summary: string;
-}
 
 export default function Chat() {
   const [messages, setMessages] = useState<Array<{ role: string; content: string }>>([]);
@@ -25,7 +19,6 @@ export default function Chat() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [pdfStatus, setPdfStatus] = useState<DocumentStatus>({ pdf_uploaded: false, chunks_count: 0 });
-  const [youtubeUrl, setYoutubeUrl] = useState('');
   const [appendContext, setAppendContext] = useState(false);
   const [hasUploadedInSession, setHasUploadedInSession] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -73,8 +66,17 @@ export default function Chat() {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.type !== 'application/pdf') {
-        setError('Please select a PDF file.');
+      // Check if it's a supported document type
+      const filename = file.name.toLowerCase();
+      const isValidType = filename.endsWith('.pdf') || 
+                         filename.endsWith('.docx') || 
+                         filename.endsWith('.doc') ||
+                         file.type === 'application/pdf' ||
+                         file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+                         file.type === 'application/msword';
+      
+      if (!isValidType) {
+        setError('Please select a PDF or Word document (.pdf, .docx, .doc).');
         return;
       }
       setSelectedFile(file);
@@ -82,15 +84,17 @@ export default function Chat() {
     }
   };
 
-  const handleUploadYoutube = async () => {
-    // YouTube functionality temporarily disabled for minimal deployment
-    setError('YouTube video processing is temporarily unavailable in the minimal deployment. Please use PDF uploads for now.');
-    return;
-  };
 
-  const handleUploadPdf = async () => {
+  const handleUploadDocument = async () => {
     if (!selectedFile || !apiKey.trim()) {
-      setError('Please select a PDF file and enter your API key.');
+      setError('Please select a document file and enter your API key.');
+      return;
+    }
+
+    // Validate file type
+    const filename = selectedFile.name.toLowerCase();
+    if (!(filename.endsWith('.pdf') || filename.endsWith('.docx') || filename.endsWith('.doc'))) {
+      setError('Please select a PDF or Word document (.pdf, .docx, .doc).');
       return;
     }
 
@@ -103,22 +107,27 @@ export default function Chat() {
       formData.append('api_key', apiKey);
       formData.append('append_context', appendContext.toString());
 
-      console.log('Uploading PDF to:', `${API_URL}/api/upload-pdf`);
-      const response = await fetch(`${API_URL}/api/upload-pdf`, {
+      console.log('Uploading document to:', `${API_URL}/api/upload-document`);
+      console.log('File details:', {
+        name: selectedFile.name,
+        size: selectedFile.size,
+        type: selectedFile.type
+      });
+      const response = await fetch(`${API_URL}/api/upload-document`, {
         method: 'POST',
         body: formData,
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('PDF Upload Error:', response.status, errorText);
+        console.error('Document Upload Error:', response.status, errorText);
         throw new Error(`Upload Error: ${response.status} ${errorText}`);
       }
 
       const result = await response.json();
       console.log('Upload successful:', result);
       
-      // Update PDF status
+      // Update document status
       setPdfStatus({ pdf_uploaded: true, chunks_count: result.chunks_count });
       setHasUploadedInSession(true);
       
@@ -129,14 +138,15 @@ export default function Chat() {
       }
       
       // Add success message and summary to chat
+      const docType = result.document_type || 'Document';
       setMessages(prev => [...prev, { 
         role: 'system', 
-        content: `PDF "${result.filename}" uploaded successfully! Created ${result.chunks_count} text chunks.\n\nDocument Summary:\n${result.summary}\n\nYou can now ask questions about the document.` 
+        content: `${docType} document "${result.filename}" uploaded successfully! Created ${result.chunks_count} text chunks.\n\nDocument Summary:\n${result.summary}\n\nYou can now ask questions about the document.` 
       }]);
 
     } catch (error) {
       console.error('Upload error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to upload PDF';
+      const errorMessage = error instanceof Error ? error.message : 'Failed to upload document';
       setError(errorMessage);
     } finally {
       setIsUploading(false);
@@ -149,7 +159,7 @@ export default function Chat() {
 
     // Check if content is uploaded for RAG functionality
     if (!pdfStatus.pdf_uploaded) {
-      setError('Please upload content (PDF or YouTube video) first to enable chat functionality.');
+      setError('Please upload a document (PDF or Word) first to enable chat functionality.');
       return;
     }
 
@@ -261,23 +271,23 @@ export default function Chat() {
 
           {/* PDF Upload */}
           <div className="mb-4">
-            <h4 className="text-sm font-semibold text-purple-600 mb-2">Upload Research Paper (PDF)</h4>
+            <h4 className="text-sm font-semibold text-purple-600 mb-2">Upload Document (PDF or Word)</h4>
             <div className="flex gap-3 items-end">
               <div className="flex-1">
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".pdf"
+                  accept=".pdf,.docx,.doc"
                   onChange={handleFileSelect}
                   className="w-full p-2 border border-purple-200 rounded focus:outline-none focus:ring-2 focus:ring-purple-400 bg-white"
                 />
               </div>
               <button
-                onClick={handleUploadPdf}
+                onClick={handleUploadDocument}
                 disabled={!selectedFile || !apiKey || isUploading}
                 className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded font-bold shadow-md hover:from-purple-600 hover:to-pink-600 focus:outline-none focus:ring-2 focus:ring-purple-400 disabled:opacity-50 transition-all duration-150"
               >
-                {isUploading ? 'Uploading...' : 'Upload PDF'}
+                {isUploading ? 'Uploading...' : 'Upload Document'}
               </button>
             </div>
             
@@ -287,7 +297,7 @@ export default function Chat() {
               </div>
             )}
             
-            {/* Context Options for PDF - Only show when file is selected AND content was uploaded in this session */}
+            {/* Context Options for Document - Only show when file is selected AND content was uploaded in this session */}
             {selectedFile && hasUploadedInSession && (
               <div className="mt-3 p-3 bg-blue-50 rounded-lg">
                 <div className="text-sm font-medium text-gray-700 mb-2">How would you like to handle this content?</div>
@@ -317,64 +327,13 @@ export default function Chat() {
             )}
           </div>
 
-          {/* YouTube URL Upload */}
-          <div>
-            <h4 className="text-sm font-semibold text-purple-600 mb-2">Or Add YouTube Video URL</h4>
-            <div className="flex gap-3 items-end">
-              <div className="flex-1">
-                <input
-                  type="url"
-                  value={youtubeUrl}
-                  onChange={(e) => setYoutubeUrl(e.target.value)}
-                  placeholder="Enter YouTube video URL"
-                  className="w-full p-2 border border-purple-200 rounded focus:outline-none focus:ring-2 focus:ring-purple-400 bg-white"
-                />
-              </div>
-              <button
-                onClick={handleUploadYoutube}
-                disabled={!youtubeUrl || !apiKey || isUploading}
-                className="px-4 py-2 bg-gradient-to-r from-red-500 to-pink-500 text-white rounded font-bold shadow-md hover:from-red-600 hover:to-pink-600 focus:outline-none focus:ring-2 focus:ring-red-400 disabled:opacity-50 transition-all duration-150"
-              >
-                {isUploading ? 'Processing...' : 'Process Video'}
-              </button>
-            </div>
-            
-            {/* Context Options for YouTube - Only show when URL is entered AND content was uploaded in this session */}
-            {youtubeUrl && hasUploadedInSession && (
-              <div className="mt-3 p-3 bg-blue-50 rounded-lg">
-                <div className="text-sm font-medium text-gray-700 mb-2">How would you like to handle this content?</div>
-                <div className="flex gap-4">
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      name="youtubeContextOption"
-                      checked={!appendContext}
-                      onChange={() => setAppendContext(false)}
-                      className="mr-2"
-                    />
-                    <span className="text-sm">Replace existing content</span>
-                  </label>
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      name="youtubeContextOption"
-                      checked={appendContext}
-                      onChange={() => setAppendContext(true)}
-                      className="mr-2"
-                    />
-                    <span className="text-sm">Add to existing content</span>
-                  </label>
-                </div>
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Chat Messages */}
         <div className="h-[400px] overflow-y-auto mb-6 p-4 bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg border border-blue-100 shadow-inner">
           {messages.length === 0 && (
             <div className="text-center text-gray-400 mt-32">
-              Upload a research paper or add a YouTube video URL to start exploring!
+              Upload a document (PDF or Word) to start exploring!
             </div>
           )}
           {messages.map((message, index) => (
@@ -403,7 +362,7 @@ export default function Chat() {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={pdfStatus.pdf_uploaded ? "Ask about methodology, references, pros/cons, or any aspect of the content..." : "Upload a research paper or YouTube video to start analyzing"}
+            placeholder={pdfStatus.pdf_uploaded ? "Ask about methodology, references, pros/cons, or any aspect of the content..." : "Upload a document (PDF or Word) to start analyzing"}
             className="flex-1 p-3 border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white placeholder:text-blue-300"
             disabled={isLoading || !pdfStatus.pdf_uploaded}
           />
