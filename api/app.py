@@ -37,14 +37,9 @@ document_sources: List[str] = []  # Track sources of chunks
 pdf_uploaded = False
 
 # Get allowed origins from environment variable or use defaults
-# For Vercel deployments, we'll allow the specific domain
-vercel_url = os.getenv("VERCEL_URL")
-if vercel_url:
-    ALLOWED_ORIGINS = [
-        "http://localhost:3000",
-        f"https://{vercel_url}",
-        "https://the-ai-engineer-challenge.vercel.app"
-    ]
+# For Vercel deployments, allow all vercel.app domains
+if os.getenv("VERCEL"):
+    ALLOWED_ORIGINS = ["*"]  # Allow all origins in Vercel for simplicity
 else:
     ALLOWED_ORIGINS = os.getenv(
         "ALLOWED_ORIGINS",
