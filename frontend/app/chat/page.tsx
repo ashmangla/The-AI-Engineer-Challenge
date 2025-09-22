@@ -49,7 +49,7 @@ export default function Chat() {
 
     const checkPdfStatus = async () => {
       try {
-        const response = await fetch(`${API_URL}/api/pdf-status`);
+        const response = await fetch(`${API_URL}/pdf-status`);
         if (response.ok) {
           const status = await response.json();
           setPdfStatus(status);
@@ -107,13 +107,13 @@ export default function Chat() {
       formData.append('api_key', apiKey);
       formData.append('append_context', appendContext.toString());
 
-      console.log('Uploading document to:', `${API_URL}/api/upload-document`);
+      console.log('Uploading document to:', `${API_URL}/upload-document`);
       console.log('File details:', {
         name: selectedFile.name,
         size: selectedFile.size,
         type: selectedFile.type
       });
-      const response = await fetch(`${API_URL}/api/upload-document`, {
+      const response = await fetch(`${API_URL}/upload-document`, {
         method: 'POST',
         body: formData,
       });
@@ -170,8 +170,8 @@ export default function Chat() {
     setError(null);
 
     try {
-      console.log('Sending RAG chat request to:', `${API_URL}/api/rag-chat-mixed-media`);
-      const response = await fetch(`${API_URL}/api/rag-chat-mixed-media`, {
+      console.log('Sending RAG chat request to:', `${API_URL}/rag-chat-mixed-media`);
+      const response = await fetch(`${API_URL}/rag-chat-mixed-media`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
