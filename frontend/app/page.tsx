@@ -10,7 +10,7 @@ export default function Home() {
   useEffect(() => {
     const checkApiHealth = async () => {
       try {
-        const response = await fetch(`${API_URL}/api/health`);
+        const response = await fetch(`${API_URL}/health`);
         if (response.ok) {
           setApiStatus('healthy');
         } else {

@@ -36,7 +36,7 @@ export default function Chat() {
   useEffect(() => {
     const checkHealth = async () => {
       try {
-        const response = await fetch(`${API_URL}/api/health`);
+        const response = await fetch(`${API_URL}/health`);
         if (!response.ok) {
           console.error('Health check failed:', response.status, response.statusText);
           setError('API is not responding. Please try again later.');
